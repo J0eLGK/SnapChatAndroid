@@ -1,5 +1,6 @@
 package snap.views;
 
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -7,10 +8,13 @@ import java.util.List;
 import snap.controllers.Const;
 import snap.models.Conversation;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.InputType;
 import android.text.format.DateUtils;
+import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,14 +22,17 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.AbsListView;
 import android.widget.BaseAdapter;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
 import com.parse.FindCallback;
 import com.parse.ParseException;
+import com.parse.ParseFile;
 import com.parse.ParseObject;
 import com.parse.ParseQuery;
 import com.parse.SaveCallback;
+import com.squareup.picasso.Picasso;
 
 public class Chat extends CustomActivity{
 
@@ -40,8 +47,10 @@ public class Chat extends CustomActivity{
 	private Date lastMsgDate;
 
 	private boolean isRunning;
+	private Bitmap photo;
 
 	private static Handler handler;
+	private static final int CAMERA_REQUEST = 1888;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState){
@@ -54,12 +63,12 @@ public class Chat extends CustomActivity{
 		list.setAdapter(adp);
 		list.setTranscriptMode(AbsListView.TRANSCRIPT_MODE_ALWAYS_SCROLL);
 		list.setStackFromBottom(true);
-
 		txt = (EditText) findViewById(R.id.txt);
 		txt.setInputType(InputType.TYPE_CLASS_TEXT
 				| InputType.TYPE_TEXT_FLAG_MULTI_LINE);
 
 		setTouchNClick(R.id.btnSend);
+		setTouchNClick(R.id.btnCamera);
 
 		buddy = getIntent().getStringExtra(Const.EXTRA_DATA);
 		getActionBar().setTitle(buddy);
@@ -85,17 +94,24 @@ public class Chat extends CustomActivity{
 		super.onClick(v);
 		if (v.getId() == R.id.btnSend){
 			sendMessage();
+		}else if(v.getId() == R.id.btnCamera){
+			Intent cameraIntent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE); 
+            startActivityForResult(cameraIntent, CAMERA_REQUEST);
 		}
-
 	}
-
+	
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {  
+	    if (requestCode == CAMERA_REQUEST && resultCode == RESULT_OK) {  
+	        photo = (Bitmap) data.getExtras().get("data");
+	    }  
+	}
+	
 	private void sendMessage(){
 		if (txt.length() == 0)
 			return;
 
 		InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
 		imm.hideSoftInputFromWindow(txt.getWindowToken(), 0);
-
 		String s = txt.getText().toString();
 		final Conversation c = new Conversation(s, new Date(),
 				UserList.user.getUsername());
@@ -103,11 +119,21 @@ public class Chat extends CustomActivity{
 		convList.add(c);
 		adp.notifyDataSetChanged();
 		txt.setText(null);
-
-		ParseObject po = new ParseObject("Chat");
+		ParseFile file = null;
+		if(photo != null){
+			ByteArrayOutputStream stream = new ByteArrayOutputStream();
+			photo.compress(Bitmap.CompressFormat.JPEG, 70, stream);
+			byte[] image = stream.toByteArray();
+			file = new ParseFile("image.jpg", image);
+			file.saveInBackground();
+		}
+		final ParseObject po = new ParseObject("Chat");		
 		po.put("sender", UserList.user.getUsername());
 		po.put("receiver", buddy);
 		po.put("message", s);
+		if(file!=null)
+			po.put("photo", file);
+		po.saveInBackground();			
 		po.saveEventually(new SaveCallback() {
 
 			@Override
@@ -119,11 +145,12 @@ public class Chat extends CustomActivity{
 				adp.notifyDataSetChanged();
 			}
 		});
+		photo = null;
 	}
-
+	
 	private void loadConversationList(){
 		ParseQuery<ParseObject> q = ParseQuery.getQuery("Chat");
-		if (convList.size() == 0){
+		if (convList.size() == 0 && UserList.user!=null){
 			ArrayList<String> al = new ArrayList<String>();
 			al.add(buddy);
 			al.add(UserList.user.getUsername());
@@ -134,39 +161,60 @@ public class Chat extends CustomActivity{
 			if (lastMsgDate != null)
 				q.whereGreaterThan("createdAt", lastMsgDate);
 			q.whereEqualTo("sender", buddy);
-			q.whereEqualTo("receiver", UserList.user.getUsername());
+			if(UserList.user != null)
+				q.whereEqualTo("receiver", UserList.user.getUsername());
 		}
+		
 		q.orderByDescending("createdAt");
 		q.setLimit(30);
 		q.findInBackground(new FindCallback<ParseObject>() {
-
 			@Override
 			public void done(List<ParseObject> li, ParseException e){
+				Conversation c = null;
+				//Log.v("size",String.valueOf(li.size()));
 				if (li != null && li.size() > 0){
 					for (int i = li.size() - 1; i >= 0; i--){
 						ParseObject po = li.get(i);
-						Conversation c = new Conversation(po
+						ParseFile file = po.getParseFile("photo");
+						if(file != null){
+							c = new Conversation(po
+								.getString("message"), po.getCreatedAt(), po
+								.getString("sender"),file.getUrl());
+						}else{
+							c = new Conversation(po
 								.getString("message"), po.getCreatedAt(), po
 								.getString("sender"));
+						}
 						convList.add(c);
-						if (lastMsgDate == null
-								|| lastMsgDate.before(c.getDate()))
+						/*
+						Date after = c.getDate();
+						after.setTime(after.getTime() + 10000);
+						if(new Date().after(after)){
+							Log.v("insert remove",c.toString());
+							convList.remove(c);
+							po.deleteInBackground();
+							adp.notifyDataSetChanged();
+						}
+						*/
+						
+						if (lastMsgDate == null || lastMsgDate.before(c.getDate()))
 							lastMsgDate = c.getDate();
-						adp.notifyDataSetChanged();
 					}
+					
 				}
+				adp.notifyDataSetChanged();
 				handler.postDelayed(new Runnable() {
 					@Override
 					public void run(){
-						if (isRunning)
+						if (isRunning){
 							loadConversationList();
+						}
 					}
 				}, 1000);
 			}
 		});
 
 	}
-
 	private class ChatAdapter extends BaseAdapter{
 		
 		@Override
@@ -199,6 +247,9 @@ public class Chat extends CustomActivity{
 
 			lbl = (TextView) v.findViewById(R.id.lbl2);
 			lbl.setText(c.getMsg());
+			
+			ImageView iv = (ImageView) v.findViewById(R.id.iv);
+			Picasso.with(getApplication()).load(c.getUrl()).into(iv);
 
 			lbl = (TextView) v.findViewById(R.id.lbl3);
 			if (c.isSent()){
@@ -211,12 +262,10 @@ public class Chat extends CustomActivity{
 			}
 			else
 				lbl.setText("");
-
 			return v;
 		}
 
 	}
-
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item){
 		if (item.getItemId() == android.R.id.home){
