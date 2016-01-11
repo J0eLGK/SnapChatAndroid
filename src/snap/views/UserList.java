@@ -5,6 +5,7 @@ import java.util.List;
 
 import snap.controllers.Const;
 import snap.controllers.Utils;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.os.Bundle;
@@ -27,6 +28,8 @@ public class UserList extends CustomActivity{
 	private ArrayList<ParseUser> uList;
 
 	public static ParseUser user;
+	
+	public AlertDialog dialog;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState){
@@ -70,13 +73,16 @@ public class UserList extends CustomActivity{
 	}
 	
 	private void updateUserStatus(boolean online){
-		user.put("online", online);
-		user.saveEventually();
+		if(user != null){
+			user.put("online", online);
+			user.saveEventually();
+		}
 	}
 
 	private void loadUserList(){
 		final ProgressDialog dia = ProgressDialog.show(this, null,
 				getString(R.string.alert_loading));
+		if(user != null){
 		ParseUser.getQuery().whereNotEqualTo("username", user.getUsername())
 				.findInBackground(new FindCallback<ParseUser>() {
 
@@ -113,6 +119,13 @@ public class UserList extends CustomActivity{
 						}
 					}
 				});
+		}else{
+			dialog = Utils.showDialog(this,"Error getting user");
+		}
+	}
+	
+	public AlertDialog returnDialog(){
+		return dialog;
 	}
 	
 	private class UserAdapter extends BaseAdapter{
