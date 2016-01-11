@@ -18,21 +18,38 @@ public class Conversation{
 	private Date date;
 
 	private String sender;
+	
+	private String url;
 
 	public Conversation(String msg, Date date, String sender){
 		this.msg = msg;
 		this.date = date;
 		this.sender = sender;
 	}
+	
+	public Conversation(String msg, Date date, String sender,String url){
+		this.msg = msg;
+		this.date = date;
+		this.sender = sender;
+		this.url = url;
+	}
 
 	public Conversation(){
 		//ADEIO !
 	}
 
+	public String getUrl(){
+		return url;
+	}
+
+	public void setUrl(String url){
+		this.url = url;
+	}
+	
 	public String getMsg(){
 		return msg;
 	}
-
+	
 	public void setMsg(String msg){
 		this.msg = msg;
 	}
