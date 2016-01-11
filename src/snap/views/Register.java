@@ -1,6 +1,7 @@
 package snap.views;
 
 import snap.controllers.Utils;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.os.Bundle;
@@ -18,6 +19,7 @@ public class Register extends CustomActivity{
 	private EditText pwd;
 
 	private EditText email;
+	private AlertDialog dialog;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState){
@@ -30,7 +32,9 @@ public class Register extends CustomActivity{
 		pwd = (EditText) findViewById(R.id.pwd);
 		email = (EditText) findViewById(R.id.email);
 	}
-
+	public AlertDialog getDialog(){
+	    return dialog;
+	}
 	@Override
 	public void onClick(View v){
 		super.onClick(v);
@@ -39,7 +43,7 @@ public class Register extends CustomActivity{
 		String p = pwd.getText().toString();
 		String e = email.getText().toString();
 		if (u.length() == 0 || p.length() == 0 || e.length() == 0){
-			Utils.showDialog(this, R.string.err_fields_empty);
+			dialog = Utils.showDialog(this, R.string.err_fields_empty);
 			return;
 		}
 		final ProgressDialog dia = ProgressDialog.show(this, null,
