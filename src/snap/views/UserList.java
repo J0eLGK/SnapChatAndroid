@@ -1,14 +1,18 @@
 package snap.views;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import snap.controllers.Const;
 import snap.controllers.Utils;
+import snap.models.Users;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,15 +25,18 @@ import android.widget.Toast;
 
 import com.parse.FindCallback;
 import com.parse.ParseException;
+import com.parse.ParseObject;
+import com.parse.ParseQuery;
 import com.parse.ParseUser;
 
 public class UserList extends CustomActivity{
 
-	private ArrayList<ParseUser> uList;
-
+	private static ArrayList<ParseUser> uList = new ArrayList<ParseUser>();
+	private ArrayList<Users> list = new ArrayList<Users>();
 	public static ParseUser user;
-	
+	private static Handler handler;
 	public AlertDialog dialog;
+	private ArrayList<String> fNames = new ArrayList<String>();
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState){
@@ -39,8 +46,10 @@ public class UserList extends CustomActivity{
 		getActionBar().setDisplayHomeAsUpEnabled(false);
 		
 		setTouchNClick(R.id.btnLogout);
+		setTouchNClick(R.id.btnAddFriends);
 
 		updateUserStatus(true);
+		handler = new Handler();
 	}
 	
 	@Override
@@ -49,6 +58,12 @@ public class UserList extends CustomActivity{
 		if (v.getId() == R.id.btnLogout){
 			logout();
 			
+		}
+		if(v.getId() == R.id.btnAddFriends){
+			AddList.user = user;
+			
+			startActivity(new Intent(UserList.this,AddList.class).putStringArrayListExtra("friends", fNames));
+			fNames.clear();
 		}
 	}
 	
@@ -69,7 +84,6 @@ public class UserList extends CustomActivity{
 	protected void onResume(){
 		super.onResume();
 		loadUserList();
-
 	}
 	
 	private void updateUserStatus(boolean online){
@@ -80,49 +94,61 @@ public class UserList extends CustomActivity{
 	}
 
 	private void loadUserList(){
+		uList.clear();
 		final ProgressDialog dia = ProgressDialog.show(this, null,
 				getString(R.string.alert_loading));
-		if(user != null){
-		ParseUser.getQuery().whereNotEqualTo("username", user.getUsername())
-				.findInBackground(new FindCallback<ParseUser>() {
+			ParseQuery<ParseObject> q = ParseQuery.getQuery("Friend");
+			q.whereEqualTo("id", user.getObjectId());
+			dia.dismiss();
+			q.orderByDescending("createdAt");
+			q.findInBackground(new FindCallback<ParseObject>() {
+				@Override
+				public void done(List<ParseObject> li, ParseException e){
+					
+					if (li != null && li.size() > 0){
+						for (int i=0;i<li.size();i++){
+							ParseObject po = li.get(i);
+							ParseQuery<ParseUser> query = ParseUser.getQuery();
+							query.whereEqualTo("objectId", po.getString("fid"));
+							query.findInBackground(new FindCallback<ParseUser>() {
+								
+								  public void done(List<ParseUser> objects, ParseException e) {
+								    if (e == null) {
+								    	Set<String> hs = new HashSet<String>();
+								    	ParseUser pu = objects.get(0);
+								    	uList.add(pu);
+								    	fNames.add(pu.getUsername());
+								    	Log.v("fnames",fNames.toString());
+								    	Log.v("well",String.valueOf(uList));
+								    	ListView list = (ListView) findViewById(R.id.list);
+										list.setAdapter(new UserAdapter());
+										list.setOnItemClickListener(new OnItemClickListener() {
 
-					@Override
-					public void done(List<ParseUser> li, ParseException e){
-						dia.dismiss();
-						if (li != null){
-							if (li.size() == 0)
-								Toast.makeText(UserList.this,
-										R.string.msg_no_user_found,
-										Toast.LENGTH_SHORT).show();
-
-							uList = new ArrayList<ParseUser>(li);
-							ListView list = (ListView) findViewById(R.id.list);
-							list.setAdapter(new UserAdapter());
-							list.setOnItemClickListener(new OnItemClickListener() {
-
-								@Override
-								public void onItemClick(AdapterView<?> arg0,
-										View arg1, int pos, long arg3){
-									startActivity(new Intent(UserList.this,
-											Chat.class).putExtra(
-											Const.EXTRA_DATA, uList.get(pos)
-													.getUsername()));
-								}
-							});
+											@Override
+											public void onItemClick(AdapterView<?> arg0,
+													View arg1, int pos, long arg3){
+												startActivity(new Intent(UserList.this,
+														Chat.class).putExtra(
+														Const.EXTRA_DATA, uList.get(pos)
+																.getUsername()));
+											}
+										});
+								    } else {
+								        // Something went wrong.
+								    	Utils.showDialog(
+												UserList.this,
+												getString(R.string.err_users) + " "
+														+ e.getMessage());
+										e.printStackTrace();
+								    }
+								  }
+								});
 						}
-						else{
-							Utils.showDialog(
-									UserList.this,
-									getString(R.string.err_users) + " "
-											+ e.getMessage());
-							e.printStackTrace();
-						}
+						Log.v("well",String.valueOf(uList));
 					}
-				});
-		}else{
-			dialog = Utils.showDialog(this,"Error getting user");
+				}
+			});
 		}
-	}
 	
 	public AlertDialog returnDialog(){
 		return dialog;
